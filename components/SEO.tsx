@@ -14,7 +14,7 @@ interface SEOProps {
 const SEO: React.FC<SEOProps> = ({ 
   title, 
   description = "منصتكم الأولى للترفيه العربي والتركي والأجنبي. شاهدوا أحدث الأفلام والمسلسلات بجودة عالية في أي وقت ومن أي مكان.",
-  image = "/og-image.jpg", // High-quality default preview
+  image = "/logo.png", // تم تحديث الصورة الافتراضية للوجو
   type = 'website',
   url = typeof window !== 'undefined' ? window.location.pathname : '',
   schema,
@@ -47,6 +47,14 @@ const SEO: React.FC<SEOProps> = ({
     ]
   };
 
+  const websiteSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "سينماتيكس",
+    "url": domain,
+    "image": absoluteLogoUrl
+  };
+
   return (
     <Helmet>
       <html lang="ar" dir="rtl" />
@@ -55,8 +63,8 @@ const SEO: React.FC<SEOProps> = ({
       <link rel="canonical" href={canonicalUrl} />
       
       {/* Favicons & Brand Icons for Search Engines */}
-      <link rel="icon" href="/logo.png" />
-      <link rel="shortcut icon" href="/logo.png" />
+      <link rel="icon" type="image/png" href="/logo.png" />
+      <link rel="shortcut icon" type="image/png" href="/logo.png" />
       <link rel="apple-touch-icon" href="/logo.png" />
       <link rel="apple-touch-icon-precomposed" href="/logo.png" />
 
@@ -67,9 +75,9 @@ const SEO: React.FC<SEOProps> = ({
       <meta property="og:url" content={canonicalUrl} />
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={description} />
-      <meta property="og:image" content={absoluteImageUrl} />
-      <meta property="og:image:width" content="1200" />
-      <meta property="og:image:height" content="630" />
+      <meta property="og:image" content={absoluteLogoUrl} />
+      <meta property="og:image:width" content="512" />
+      <meta property="og:image:height" content="512" />
       <meta property="og:site_name" content={siteName} />
       <meta property="og:locale" content="ar_AR" />
 
@@ -78,11 +86,15 @@ const SEO: React.FC<SEOProps> = ({
       <meta name="twitter:url" content={canonicalUrl} />
       <meta name="twitter:title" content={fullTitle} />
       <meta name="twitter:description" content={description} />
-      <meta name="twitter:image" content={absoluteImageUrl} />
+      <meta name="twitter:image" content={absoluteLogoUrl} />
 
       {/* Default Organization Schema */}
       <script type="application/ld+json">
         {JSON.stringify(organizationSchema)}
+      </script>
+
+      <script type="application/ld+json">
+        {JSON.stringify(websiteSchema)}
       </script>
 
       {schema && (
