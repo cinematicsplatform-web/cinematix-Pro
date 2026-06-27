@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "GlobalServer": {
+      "title": "Global Server Configuration",
+      "description": "Base domains for streaming servers to dynamically resolve episodic video URLs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "baseDomain": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "baseDomain"]
+    },
+    "ContentRequest": {
+      "title": "Content Request",
+      "description": "User requests for content that is not available on the platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["movie", "series"] },
+        "notes": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "requestId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "type", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/servers/{serverId}": {
+      "schema": "GlobalServer",
+      "description": "Collection of global video servers and their base domains."
+    },
+    "/requests/{requestId}": {
+      "schema": "ContentRequest",
+      "description": "Requests made by users or external apps for content."
+    }
+  }
+}
