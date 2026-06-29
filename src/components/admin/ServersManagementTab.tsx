@@ -96,6 +96,9 @@ const ServersManagementTab: React.FC<ServersManagementTabProps> = ({ addToast, o
         await Promise.all(serversList.map(async (server) => {
             try {
                 let targetUrl = server.baseDomain.startsWith('http') ? server.baseDomain : 'https://' + server.baseDomain;
+                if (typeof window !== 'undefined' && window.location.protocol === 'https:' && targetUrl.startsWith('http://')) {
+                    targetUrl = targetUrl.replace(/^http:\/\//, 'https://');
+                }
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 4000);
 

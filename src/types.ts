@@ -165,6 +165,7 @@ export interface AutoLinkConfig {
   suffix: string;
   padZero: boolean;
   padTwoZeros: boolean;
+  selectedQualities?: string[];
 }
 
 export interface GlobalServer {
@@ -504,6 +505,22 @@ export interface ContentRequest {
     requestId?: string | null;
     status: 'pending' | 'completed';
     createdAt: string; 
+}
+
+export interface Report {
+    id: string;
+    reportId?: string;
+    contentId: string;
+    contentType: 'movie' | 'series';
+    episodeId?: string;
+    contentTitle: string;
+    reason: string;
+    description?: string;
+    userId?: string | null;
+    userEmail?: string | null;
+    timestamp: any;
+    status: 'pending' | 'resolved' | 'ignored';
+    createdAt?: string;
 }
 
 export const MediaType = {

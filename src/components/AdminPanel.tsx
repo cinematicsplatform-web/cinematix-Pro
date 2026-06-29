@@ -304,7 +304,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'servers_domains': return <ServersManagementTab addToast={props.addToast} onServersChanged={props.onContentChanged} />;
             case 'users': return <UserManagementTab users={props.allUsers} onAddAdmin={props.onAddAdmin} onRequestDelete={confirmDeleteUser} addToast={props.addToast} />;
             case 'requests': return <RequestsTab addToast={props.addToast} onRequestDelete={confirmDeleteRequest} />;
-            case 'reports': return <ReportsManagementTab addToast={props.addToast} onRequestDelete={confirmDeleteReport} />;
+            case 'reports': return <ReportsManagementTab addToast={props.addToast} onRequestDelete={confirmDeleteReport} allContent={allContent} onEditContent={openContentModalForEdit} />;
             case 'ads': return <AdsManagementTab ads={props.allAds} onNew={openAdModalForNew} onEdit={openAdModalForEdit} onRequestDelete={confirmDeleteAd} onUpdateAd={props.onUpdateAd} />;
             case 'startup_ad': return <StartupAdTab siteSettings={props.siteSettings} onSetSiteSettings={props.onSetSiteSettings} allContent={allContent} />;
             case 'promo_banners': return <PromoBannersTab addToast={props.addToast} allContent={allContent} onContentChanged={props.onContentChanged} />;

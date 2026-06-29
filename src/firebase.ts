@@ -463,29 +463,55 @@ export const deleteContentRequest = async (requestId: string): Promise<void> => 
 
 export const addReport = async (reportData: { 
     contentId: string;
+    contentType: 'movie' | 'series';
+    episodeId?: string;
     contentTitle: string;
-    episode?: string;
     reason: string;
     description?: string;
+    userId?: string | null;
+    userEmail?: string | null;
 }): Promise<void> => {
-    await db.collection('reports').add({
-        ...reportData,
-        status: 'open',
-        createdAt: serverTimestamp()
+    const docRef = db.collection('reports').doc();
+    await docRef.set({
+        reportId: docRef.id,
+        contentId: reportData.contentId,
+        contentType: reportData.contentType,
+        episodeId: reportData.episodeId || null,
+        contentTitle: reportData.contentTitle,
+        reason: reportData.reason,
+        description: reportData.description || '',
+        userId: reportData.userId || null,
+        userEmail: reportData.userEmail || null,
+        timestamp: serverTimestamp(),
+        createdAt: serverTimestamp(), // fallback compatibility
+        status: 'pending'
     });
 };
 
 export const getReports = async (): Promise<any[]> => {
     try {
-        const snapshot = await db.collection('reports').orderBy('createdAt', 'desc').get();
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: safeGetTimestamp(doc.data().createdAt)
-        }));
+        let snapshot;
+        try {
+            snapshot = await db.collection('reports').orderBy('timestamp', 'desc').get();
+        } catch (e) {
+            snapshot = await db.collection('reports').orderBy('createdAt', 'desc').get();
+        }
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                timestamp: safeGetTimestamp(data.timestamp || data.createdAt),
+                createdAt: safeGetTimestamp(data.createdAt || data.timestamp)
+            };
+        });
     } catch (e) {
         return [];
     }
+};
+
+export const updateReportStatus = async (reportId: string, status: 'pending' | 'resolved' | 'ignored'): Promise<void> => {
+    await db.collection('reports').doc(reportId).update({ status });
 };
 
 export const deleteReport = async (reportId: string): Promise<void> => {
@@ -784,6 +810,13 @@ export const resolveContentDynamicUrls = (contents: Content[], servers: GlobalSe
             if (!originalUrl || originalUrl.trim() === '') return originalUrl;
             if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) return originalUrl;
             
+            const upgradeProtocol = (url: string): string => {
+                if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+                    return url.replace(/^http:\/\//, 'https://');
+                }
+                return url;
+            };
+
             try {
                 const urlObj = new URL(originalUrl);
                 const hostName = urlObj.hostname.toLowerCase();
@@ -793,7 +826,7 @@ export const resolveContentDynamicUrls = (contents: Content[], servers: GlobalSe
                     'facebook.com', 'twitter.com', 'instagram.com'
                 ];
                 if (externalDomains.some(domain => hostName.includes(domain))) {
-                    return originalUrl;
+                    return upgradeProtocol(originalUrl);
                 }
                 
                 const pathName = urlObj.pathname;
@@ -828,13 +861,13 @@ export const resolveContentDynamicUrls = (contents: Content[], servers: GlobalSe
                     const cleanBaseDomain = baseDomain.endsWith('/') ? baseDomain.slice(0, -1) : baseDomain;
                     const cleanPath = pathName.startsWith('/') ? pathName : '/' + pathName;
                     const searchParam = urlObj.search || '';
-                    return cleanBaseDomain + cleanPath + searchParam;
+                    return upgradeProtocol(cleanBaseDomain + cleanPath + searchParam);
                 }
             } catch (err) {
                 // Return fallback/original URL if parser fails
-                return originalUrl;
+                return upgradeProtocol(originalUrl);
             }
-            return originalUrl;
+            return upgradeProtocol(originalUrl);
         };
 
         // 1. Resolve movie/standalone direct servers at root level
@@ -883,7 +916,10 @@ export const resolveContentDynamicUrls = (contents: Content[], servers: GlobalSe
                     // Case B: Generate the link dynamically from template metadata of autoLinkConfig (if present)
                     if (content.autoLinkConfig && content.autoLinkConfig.serverId) {
                         const matchedServer = servers.find(s => s.id === content.autoLinkConfig.serverId) || servers[0];
-                        const baseDomain = matchedServer.baseDomain || '';
+                        let baseDomain = matchedServer.baseDomain || '';
+                        if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseDomain.startsWith('http://')) {
+                            baseDomain = baseDomain.replace(/^http:\/\//, 'https://');
+                        }
                         const slug = content.autoLinkConfig.seriesSlug || '';
                         const suffix = content.autoLinkConfig.suffix || '.mp4';
                         const padZero = content.autoLinkConfig.padZero;
