@@ -1139,6 +1139,7 @@ const DetailPage: React.FC<DetailPageProps> = ({
           isOpen={isReportModalOpen} 
           onClose={() => setIsReportModalOpen(false)} 
           contentId={content.id} 
+          contentType={content.type as 'movie' | 'series'}
           contentTitle={content.title}
           isCosmicTealTheme={isCosmicTealTheme}
           isNetflixRedTheme={isNetflixRedTheme}

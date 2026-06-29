@@ -362,8 +362,9 @@ const EpisodeWatchPage: React.FC<EpisodeWatchPageProps> = ({
             <ReportModal 
                 isOpen={isReportModalOpen} 
                 onClose={() => setIsReportModalOpen(false)} 
-                contentId={content?.id} 
-                contentTitle={content?.title} 
+                contentId={content?.id || ''} 
+                contentType="series"
+                contentTitle={content?.title || ''} 
                 episode={`الموسم ${seasonNumber} الحلقة ${episodeNumber}`}
                 isCosmicTealTheme={isCosmicTealTheme}
                 isNetflixRedTheme={isNetflixRedTheme}

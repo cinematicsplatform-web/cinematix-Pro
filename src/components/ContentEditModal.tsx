@@ -665,6 +665,84 @@ const ServerManagementModal: React.FC<ServerManagementModalProps> = ({
     const [newServerDomain, setNewServerDomain] = useState('');
     const [isSavingNewServer, setIsSavingNewServer] = useState(false);
 
+    // الروابط الذكية والتبويبات
+    const [modalTab, setModalTab] = useState<'smart' | 'manual'>(() => {
+        const existing = episode.servers || [];
+        const hasRealData = existing.length > 1 || (existing.length === 1 && (existing[0].url || existing[0].downloadUrl));
+        return hasRealData ? 'manual' : 'smart';
+    });
+    const [smartUrl, setSmartUrl] = useState('');
+    const [selectedQualities, setSelectedQualities] = useState<string[]>(['1080p', '720p', '480p', '360p']);
+
+    const handleProcessSmartLinks = () => {
+        if (!smartUrl.trim()) {
+            addToast("يرجى إدخال الرابط الأساسي أولاً.", "error");
+            return;
+        }
+        if (selectedQualities.length === 0) {
+            addToast("يرجى اختيار جودة واحدة على الأقل.", "error");
+            return;
+        }
+
+        const qualityOrder = ['1080p', '720p', '480p', '360p'];
+        const sortedChosenQualities = qualityOrder.filter(q => selectedQualities.includes(q));
+
+        const markers = ['1080p', '720p', '480p', '360p', '1080', '720', '480', '360'];
+        const sortedMarkers = [...markers].sort((a, b) => b.length - a.length);
+
+        let detectedMarker = '';
+        for (const marker of sortedMarkers) {
+            const index = smartUrl.toLowerCase().indexOf(marker.toLowerCase());
+            if (index !== -1) {
+                detectedMarker = smartUrl.substr(index, marker.length);
+                break;
+            }
+        }
+
+        const generated: Server[] = [];
+        
+        sortedChosenQualities.forEach((targetQuality, idx) => {
+            let finalUrl = smartUrl;
+            if (detectedMarker) {
+                const escapedMarker = detectedMarker.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(escapedMarker, 'gi');
+                finalUrl = smartUrl.replace(regex, targetQuality);
+            } else {
+                const extensions = ['.mp4', '.m3u8', '.mkv', '.avi'];
+                let replacedExt = false;
+                for (const ext of extensions) {
+                    if (smartUrl.toLowerCase().endsWith(ext)) {
+                        finalUrl = smartUrl.slice(0, -ext.length) + '-' + targetQuality + ext;
+                        replacedExt = true;
+                        break;
+                    } else {
+                        const extIndex = smartUrl.toLowerCase().lastIndexOf(ext);
+                        if (extIndex !== -1 && extIndex === smartUrl.length - ext.length) {
+                            finalUrl = smartUrl.substring(0, extIndex) + '-' + targetQuality + ext;
+                            replacedExt = true;
+                            break;
+                        }
+                    }
+                }
+                if (!replacedExt) {
+                    finalUrl = smartUrl;
+                }
+            }
+
+            generated.push({
+                id: Date.now() + idx,
+                name: targetQuality,
+                url: finalUrl,
+                downloadUrl: finalUrl,
+                isActive: true
+            });
+        });
+
+        setServers(generated);
+        setModalTab('manual');
+        addToast("تم معالجة وتوليد روابط الجودات بنجاح! 🎉", "success");
+    };
+
     const handleServerChange = (index: number, field: keyof Server, value: string | boolean) => {
         const updatedServers = [...servers];
         updatedServers[index] = { ...updatedServers[index], [field]: value };
@@ -825,145 +903,266 @@ const ServerManagementModal: React.FC<ServerManagementModalProps> = ({
                     </div>
                 </div>
 
+                {/* Tab Selector */}
+                <div className="flex border-b border-gray-800 bg-[#0e1017] px-6 py-2 gap-4">
+                    <button
+                        type="button"
+                        onClick={() => setModalTab('smart')}
+                        className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                            modalTab === 'smart' 
+                                ? 'bg-[#1a2e35] text-[#00e5c9] border border-cyan-500/20' 
+                                : 'text-gray-400 hover:text-white hover:bg-[#1b1e2a]'
+                        }`}
+                    >
+                        <span>⚡ الروابط الذكية (توليد تلقائي)</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setModalTab('manual')}
+                        className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                            modalTab === 'manual' 
+                                ? 'bg-[#1b1e2a] text-sky-400 border border-sky-500/20' 
+                                : 'text-gray-400 hover:text-white hover:bg-[#1b1e2a]'
+                        }`}
+                    >
+                        <span>⚙️ السيرفرات الحالية ({servers.length})</span>
+                    </button>
+                </div>
+
                 {/* Main Content List / Canvas */}
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-4 bg-[#07080c]">
-                    {servers.map((server, index) => {
-                        return (
-                            <div key={index} className="relative rounded-2xl border border-[#1f2538] bg-[#11131c] p-5 space-y-4 transition-colors shadow-lg animate-fade-in-up">
-                                {/* Delete Row Button */}
-                                {servers.length > 1 && (
-                                    <button 
-                                        type="button"
-                                        onClick={() => handleRemoveServer(index)}
-                                        className="absolute top-4 left-4 text-gray-500 hover:text-red-500 transition-colors cursor-pointer p-1 rounded-lg hover:bg-gray-800"
-                                        title="حذف السيرفر"
-                                    >
-                                        <CloseIcon className="h-4 w-4" />
-                                    </button>
-                                )}
-
-                                {/* Name and State Selection */}
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="flex h-6 w-6 items-center justify-center rounded bg-[#07090e] border border-gray-800 font-mono text-[10px] font-bold text-gray-400">
-                                            {index + 1}
-                                        </span>
-                                        
-                                        <input 
-                                            type="text"
-                                            value={server.name} 
-                                            onChange={(e) => handleServerChange(index, 'name', e.target.value)} 
-                                            placeholder="اسم السيرفر" 
-                                            className="rounded-lg border border-gray-850 bg-[#07090e] px-4 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-bold w-44 text-center"
-                                        />
-                                    </div>
-
-                                    <div className="flex items-center">
-                                        <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={server.isActive} 
-                                                onChange={(e) => handleServerChange(index, 'isActive', e.target.checked)} 
-                                                className="h-4 w-4 accent-[#00e5c9] rounded bg-[#07090e] border-gray-800 cursor-pointer"
-                                            />
-                                            <span className="text-xs font-bold text-[#2196f3] select-none">نشط</span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                {/* Links Inputs */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="mb-1.5 block text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">رابط المشاهدة (WATCH)</label>
-                                        <input 
-                                            type="text"
-                                            value={server.url} 
-                                            onChange={(e) => handleServerChange(index, 'url', e.target.value)} 
-                                            placeholder="رابط كامل للمشاهدة أو امتداد البث..." 
-                                            className="w-full rounded-xl border border-gray-800 bg-[#07090e] px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono text-center placeholder:text-center"
-                                            dir="ltr"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="mb-1.5 block text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">رابط التحميل (DOWNLOAD)</label>
-                                        <input 
-                                            type="text"
-                                            value={server.downloadUrl} 
-                                            onChange={(e) => handleServerChange(index, 'downloadUrl', e.target.value)} 
-                                            placeholder="رابط التحميل المباشر للزوار..." 
-                                            className="w-full rounded-xl border border-gray-800 bg-[#07090e] px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono text-center placeholder:text-center"
-                                            dir="ltr"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Smart domain extraction support for quick save */}
-                                {(() => {
-                                    const isFullUrl = server.url && (server.url.includes('.mp4') || server.url.includes('.m3u8') || server.url.includes('?') || (server.url.match(/\//g) || []).length > 3);
-                                    if (!isFullUrl) return null;
-                                    try {
-                                        const urlObj = new URL(server.url.startsWith('http') ? server.url : 'https://' + server.url);
-                                        const host = urlObj.hostname.replace('www.', '');
-                                        const domainOnly = `${urlObj.protocol}//${urlObj.host}/`;
-                                        const rawName = host.split('.')[0];
-                                        const serverNameDefault = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-                                        
-                                        const isAlreadyRegistered = globalServers.some(gs => gs.baseDomain.includes(host) || gs.name.toLowerCase() === serverNameDefault.toLowerCase());
-                                        
-                                        return (
-                                            <div className="bg-[#121c2a] border border-blue-500/20 text-blue-300 p-3 rounded-lg text-[10px] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-1 font-bold animate-pulse">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="p-1 px-2 rounded bg-blue-500/10 text-blue-400 text-[8px] font-mono">ذكاء المحرك ⚡</span>
-                                                    <span>مستضيف مكشوف: <b className="font-mono text-emerald-400">{host}</b></span>
-                                                </div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button 
-                                                        type="button" 
-                                                        onClick={() => {
-                                                            handleServerChange(index, 'name', serverNameDefault);
-                                                            addToast(`تم اعتماد اسم السيرفر: "${serverNameDefault}"`, "info");
-                                                        }} 
-                                                        className="px-2 py-0.5 bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 rounded transition-colors text-[9px]"
-                                                    >
-                                                        اعتماد الاسم ({serverNameDefault})
-                                                    </button>
-                                                    {!isAlreadyRegistered && (
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={async () => {
-                                                                try {
-                                                                    await addServer({ name: serverNameDefault, baseDomain: domainOnly });
-                                                                    await onRefreshGlobalServers();
-                                                                    handleServerChange(index, 'name', serverNameDefault);
-                                                                    addToast(`تم حفظ "${serverNameDefault}" كخادم رسمي دائم!`, "success");
-                                                                } catch (e) {
-                                                                    addToast("حدث خطأ في التسجيل.", "error");
-                                                                }
-                                                            }} 
-                                                            className="px-2 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-450 rounded transition-colors text-[9px] flex items-center gap-1"
-                                                        >
-                                                            💾 حفظ كخادم دائم
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    } catch {
-                                        return null;
-                                    }
-                                })()}
+                    {modalTab === 'smart' ? (
+                        <div className="space-y-6 bg-[#11131c] border border-[#1f2538] p-6 rounded-2xl shadow-lg animate-fade-in-up">
+                            <div>
+                                <h4 className="text-sm font-black text-white mb-2 flex items-center gap-2">
+                                    <span className="text-yellow-400">⚡</span>
+                                    <span>مولد الروابط الذكية للجودات المتعددة</span>
+                                </h4>
+                                <p className="text-xs text-gray-400 leading-relaxed">
+                                    أدخل رابط جودة واحدة من الروابط التي لديك، وسيتكفل النظام الذكي باستخراج الجودة الحالية واستبدالها تلقائياً بجميع الجودات المختارة من 1080p إلى 360p مع توليد روابط المشاهدة والتحميل دفعة واحدة!
+                                </p>
                             </div>
-                        );
-                    })}
 
-                    <button 
-                        type="button"
-                        onClick={handleAddServer}
-                        className="flex w-full items-center justify-center gap-2 border border-dashed border-[#1f2538] bg-[#11131c]/50 hover:bg-[#11131c]/80 transition-all font-bold cursor-pointer rounded-xl py-3.5 text-xs text-gray-400 hover:border-green-500/50 hover:text-[#00e5c9]"
-                    >
-                        <PlusIcon className="h-4 w-4" />
-                        <span>إضافة سيرفر جديد</span>
-                    </button>
+                            {/* Base Link Input */}
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-gray-400">رابط جودة البث الأساسي (رابط أي جودة متوفرة لديك)</label>
+                                <input 
+                                    type="text"
+                                    value={smartUrl}
+                                    onChange={(e) => setSmartUrl(e.target.value)}
+                                    placeholder="مثال: https://cdn.seriesmp4.com/mov/DramaApp/Movies/arabic/alfyl-alazrq-2-2019/alfyl-alazrq-2-2019-720p.mp4"
+                                    className="w-full rounded-xl border border-gray-800 bg-[#07090e] px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono text-center placeholder:text-gray-650"
+                                    dir="ltr"
+                                />
+                            </div>
+
+                            {/* Quality Selection Checkboxes */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-gray-400">اختر الجودات المطلوب توليدها:</label>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setSelectedQualities(['1080p', '720p', '480p', '360p'])}
+                                            className="px-2 py-1 bg-[#1a2030] hover:bg-[#252f47] text-[10px] text-gray-300 rounded transition-colors cursor-pointer"
+                                        >
+                                            تحديد الكل
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setSelectedQualities([])}
+                                            className="px-2 py-1 bg-[#1a2030] hover:bg-[#252f47] text-[10px] text-gray-300 rounded transition-colors cursor-pointer"
+                                        >
+                                            إلغاء التحديد
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    {['1080p', '720p', '480p', '360p'].map((quality) => {
+                                        const isChecked = selectedQualities.includes(quality);
+                                        return (
+                                            <button
+                                                key={quality}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isChecked) {
+                                                        setSelectedQualities(selectedQualities.filter(q => q !== quality));
+                                                    } else {
+                                                        setSelectedQualities([...selectedQualities, quality]);
+                                                    }
+                                                }}
+                                                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all text-xs font-bold cursor-pointer ${
+                                                    isChecked 
+                                                        ? 'bg-cyan-500/10 border-[#00e5c9] text-[#00e5c9] shadow-md' 
+                                                        : 'bg-[#07090e] border-gray-800 text-gray-400 hover:border-gray-750'
+                                                }`}
+                                            >
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={isChecked}
+                                                    onChange={() => {}} 
+                                                    className="accent-[#00e5c9] h-3.5 w-3.5 rounded bg-gray-900 border-gray-800 pointer-events-none"
+                                                />
+                                                <span>{quality}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Process Button */}
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={handleProcessSmartLinks}
+                                    className="w-full bg-[#00e5c9] hover:bg-[#00cba9] text-black font-black py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.98]"
+                                >
+                                    <span>⚡ معالجة وتوليد السيرفرات</span>
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {servers.map((server, index) => {
+                                return (
+                                    <div key={index} className="relative rounded-2xl border border-[#1f2538] bg-[#11131c] p-5 space-y-4 transition-colors shadow-lg animate-fade-in-up">
+                                        {/* Delete Row Button */}
+                                        {servers.length > 1 && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleRemoveServer(index)}
+                                                className="absolute top-4 left-4 text-gray-500 hover:text-red-500 transition-colors cursor-pointer p-1 rounded-lg hover:bg-gray-800"
+                                                title="حذف السيرفر"
+                                            >
+                                                <CloseIcon className="h-4 w-4" />
+                                            </button>
+                                        )}
+
+                                        {/* Name and State Selection */}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="flex h-6 w-6 items-center justify-center rounded bg-[#07090e] border border-gray-800 font-mono text-[10px] font-bold text-gray-400">
+                                                    {index + 1}
+                                                </span>
+                                                
+                                                <input 
+                                                    type="text"
+                                                    value={server.name} 
+                                                    onChange={(e) => handleServerChange(index, 'name', e.target.value)} 
+                                                    placeholder="اسم السيرفر" 
+                                                    className="rounded-lg border border-gray-850 bg-[#07090e] px-4 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-bold w-44 text-center"
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center">
+                                                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={server.isActive} 
+                                                        onChange={(e) => handleServerChange(index, 'isActive', e.target.checked)} 
+                                                        className="h-4 w-4 accent-[#00e5c9] rounded bg-[#07090e] border-gray-800 cursor-pointer"
+                                                    />
+                                                    <span className="text-xs font-bold text-[#2196f3] select-none">نشط</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        {/* Links Inputs */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="mb-1.5 block text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">رابط المشاهدة (WATCH)</label>
+                                                <input 
+                                                    type="text"
+                                                    value={server.url} 
+                                                    onChange={(e) => handleServerChange(index, 'url', e.target.value)} 
+                                                    placeholder="رابط كامل للمشاهدة أو امتداد البث..." 
+                                                    className="w-full rounded-xl border border-gray-800 bg-[#07090e] px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono text-center placeholder:text-center"
+                                                    dir="ltr"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="mb-1.5 block text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">رابط التحميل (DOWNLOAD)</label>
+                                                <input 
+                                                    type="text"
+                                                    value={server.downloadUrl} 
+                                                    onChange={(e) => handleServerChange(index, 'downloadUrl', e.target.value)} 
+                                                    placeholder="رابط التحميل المباشر للزوار..." 
+                                                    className="w-full rounded-xl border border-gray-800 bg-[#07090e] px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono text-center placeholder:text-center"
+                                                    dir="ltr"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Smart domain extraction support for quick save */}
+                                        {(() => {
+                                            const isFullUrl = server.url && (server.url.includes('.mp4') || server.url.includes('.m3u8') || server.url.includes('?') || (server.url.match(/\//g) || []).length > 3);
+                                            if (!isFullUrl) return null;
+                                            try {
+                                                const urlObj = new URL(server.url.startsWith('http') ? server.url : 'https://' + server.url);
+                                                const host = urlObj.hostname.replace('www.', '');
+                                                const domainOnly = `${urlObj.protocol}//${urlObj.host}/`;
+                                                const rawName = host.split('.')[0];
+                                                const serverNameDefault = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                                                
+                                                const isAlreadyRegistered = globalServers.some(gs => gs.baseDomain.includes(host) || gs.name.toLowerCase() === serverNameDefault.toLowerCase());
+                                                
+                                                return (
+                                                    <div className="bg-[#121c2a] border border-blue-500/20 text-blue-300 p-3 rounded-lg text-[10px] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-1 font-bold animate-pulse">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="p-1 px-2 rounded bg-blue-500/10 text-blue-400 text-[8px] font-mono">ذكاء المحرك ⚡</span>
+                                                            <span>مستضيف مكشوف: <b className="font-mono text-emerald-400">{host}</b></span>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => {
+                                                                    handleServerChange(index, 'name', serverNameDefault);
+                                                                    addToast(`تم اعتماد اسم السيرفر: "${serverNameDefault}"`, "info");
+                                                                }} 
+                                                                className="px-2 py-0.5 bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 rounded transition-colors text-[9px] cursor-pointer"
+                                                            >
+                                                                اعتماد الاسم ({serverNameDefault})
+                                                            </button>
+                                                            {!isAlreadyRegistered && (
+                                                                <button 
+                                                                    type="button" 
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await addServer({ name: serverNameDefault, baseDomain: domainOnly });
+                                                                            await onRefreshGlobalServers();
+                                                                            handleServerChange(index, 'name', serverNameDefault);
+                                                                            addToast(`تم حفظ "${serverNameDefault}" كخادم رسمي دائم!`, "success");
+                                                                        } catch (e) {
+                                                                            addToast("حدث خطأ في التسجيل.", "error");
+                                                                        }
+                                                                    }} 
+                                                                    className="px-2 py-0.5 bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-450 rounded transition-colors text-[9px] flex items-center gap-1 cursor-pointer"
+                                                                >
+                                                                    💾 حفظ كخادم دائم
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            } catch {
+                                                return null;
+                                            }
+                                        })()}
+                                    </div>
+                                );
+                            })}
+
+                            <button 
+                                type="button"
+                                onClick={handleAddServer}
+                                className="flex w-full items-center justify-center gap-2 border border-dashed border-[#1f2538] bg-[#11131c]/50 hover:bg-[#11131c]/80 transition-all font-bold cursor-pointer rounded-xl py-3.5 text-xs text-gray-400 hover:border-green-500/50 hover:text-[#00e5c9]"
+                            >
+                                <PlusIcon className="h-4 w-4" />
+                                <span>إضافة سيرفر جديد</span>
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 {/* Footer Section */}
@@ -1069,7 +1268,8 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
         endNum: number | '';
         padZero: boolean;
         padTwoZeros: boolean;
-    }>({ isOpen: false, seasonId: null, serverId: '', seriesSlug: '', prefix: '', suffix: '.mp4', startNum: '', endNum: '', padZero: true, padTwoZeros: false });
+        selectedQualities: string[];
+    }>({ isOpen: false, seasonId: null, serverId: '', seriesSlug: '', prefix: '', suffix: '.mp4', startNum: '', endNum: '', padZero: true, padTwoZeros: false, selectedQualities: [] });
 
     // --- Auto-Link Modal: New Server Registration States ---
     const [autoLinkNewServerOpen, setAutoLinkNewServerOpen] = useState(false);
@@ -1165,6 +1365,11 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
         seasonId: number | null;
         title: string;
     }>({ isOpen: false, seasonId: null, title: '' });
+
+    const [deleteSectionState, setDeleteSectionState] = useState<{
+        isOpen: boolean;
+        tabId: string;
+    }>({ isOpen: false, tabId: '' });
 
     // --- BULK EPISODE IMAGE STATE ---
     const [bulkImageState, setBulkImageState] = useState<{
@@ -1357,8 +1562,13 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
     };
 
     const handleDeleteSection = (tabId: string) => {
-        if (!confirm(`هل أنت متأكد من حذف (تصفير) بيانات قسم "${tabId}" بالكامل؟`)) return;
-        
+        setDeleteSectionState({ isOpen: true, tabId });
+    };
+
+    const executeDeleteSection = () => {
+        const { tabId } = deleteSectionState;
+        if (!tabId) return;
+
         setFormData(prev => {
             const updated = { ...prev };
             switch (tabId) {
@@ -1396,7 +1606,15 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
             }
             return updated;
         });
-        addToast(`تم تصفير بيانات قسم ${tabId} بنجاح.`, 'info');
+
+        const arabicTabName = tabId === 'servers' ? 'روابط السيرفرات' : 
+                              tabId === 'general' ? 'البيانات الأساسية' : 
+                              tabId === 'categories' ? 'التصنيف والأنواع' : 
+                              tabId === 'media' ? 'الصور والميديا' : 
+                              tabId === 'seasons' ? 'المواسم والحلقات' : tabId;
+
+        addToast(`تم تصفير وحذف كافة بيانات قسم "${arabicTabName}" بنجاح.`, 'success');
+        setDeleteSectionState({ isOpen: false, tabId: '' });
     };
 
     const openBulkActionModal = (seasonId: number, type: 'add' | 'delete') => {
@@ -1643,12 +1861,13 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
             startNum: '',
             endNum: '',
             padZero: config ? config.padZero : true,
-            padTwoZeros: config ? config.padTwoZeros : false
+            padTwoZeros: config ? config.padTwoZeros : false,
+            selectedQualities: config?.selectedQualities || []
         });
     };
 
     const executeAutoLinkGeneration = () => {
-        const { seasonId, serverId, seriesSlug, suffix, startNum, endNum, padZero, padTwoZeros } = autoLinkState;
+        const { seasonId, serverId, seriesSlug, suffix, startNum, endNum, padZero, padTwoZeros, selectedQualities } = autoLinkState;
         if (!seasonId) return;
 
         const sNum = typeof startNum === 'number' ? startNum : 1;
@@ -1675,6 +1894,15 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
 
         const baseDomain = matchedServer.baseDomain || '';
 
+        const qualityOrder = ['1080p', '720p', '480p', '360p', '240p'];
+        const sortedSelectedQualities = [...(selectedQualities || [])].sort((a, b) => {
+            const idxA = qualityOrder.indexOf(a);
+            const idxB = qualityOrder.indexOf(b);
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+        });
+
         setFormData(prev => {
             const updatedSeasons = (prev.seasons || []).map(season => {
                 if (season.id !== seasonId) return season;
@@ -1691,7 +1919,6 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
 
                     const cleanedSlug = getCleanedSlug(seriesSlug);
                     const cleanBaseDomain = baseDomain.endsWith('/') ? baseDomain.slice(0, -1) : baseDomain;
-                    const generatedUrl = `${cleanBaseDomain}/${cleanedSlug}${numStr}${suffix}`;
 
                     const existingEpIndex = updatedEpisodes.findIndex(ep => extractEpisodeNumber(ep.title) === i);
                     
@@ -1700,18 +1927,33 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
                         nextServerNum = (updatedEpisodes[existingEpIndex].servers?.length || 0) + 1;
                     }
 
-                    const newServer: Server = {
-                        id: Date.now() + i + Math.random(),
-                        name: `سيرفر ${nextServerNum}`,
-                        url: generatedUrl,
-                        downloadUrl: generatedUrl,
-                        isActive: true
-                    };
+                    const newServers: Server[] = [];
+                    if (sortedSelectedQualities.length > 0) {
+                        sortedSelectedQualities.forEach((qual, qIdx) => {
+                            const generatedUrl = `${cleanBaseDomain}/${cleanedSlug}${numStr}-${qual}${suffix}`;
+                            newServers.push({
+                                id: Date.now() + i + qIdx + Math.random(),
+                                name: qual,
+                                url: generatedUrl,
+                                downloadUrl: generatedUrl,
+                                isActive: true
+                            });
+                        });
+                    } else {
+                        const generatedUrl = `${cleanBaseDomain}/${cleanedSlug}${numStr}${suffix}`;
+                        newServers.push({
+                            id: Date.now() + i + Math.random(),
+                            name: `سيرفر ${nextServerNum}`,
+                            url: generatedUrl,
+                            downloadUrl: generatedUrl,
+                            isActive: true
+                        });
+                    }
 
                     if (existingEpIndex !== -1) {
                         updatedEpisodes[existingEpIndex] = {
                             ...updatedEpisodes[existingEpIndex],
-                            servers: [...(updatedEpisodes[existingEpIndex].servers || []), newServer]
+                            servers: [...newServers, ...(updatedEpisodes[existingEpIndex].servers || [])]
                         };
                     } else {
                         updatedEpisodes.push({
@@ -1721,7 +1963,7 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
                             description: `شاهد أحداث الحلقة ${i} من الموسم ${season.seasonNumber}.`,
                             thumbnail: season.backdrop || prev.backdrop || '',
                             progress: 0,
-                            servers: [newServer],
+                            servers: newServers,
                             isScheduled: false,
                             scheduledAt: ''
                         });
@@ -1745,7 +1987,8 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
                     seriesSlug,
                     suffix,
                     padZero,
-                    padTwoZeros
+                    padTwoZeros,
+                    selectedQualities
                 }
             };
         });
@@ -4401,6 +4644,17 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
             <DeleteConfirmationModal isOpen={deleteSeasonState.isOpen} onClose={() => setDeleteSeasonState({ isOpen: false, seasonId: null, title: '' })} onConfirm={executeDeleteSeason} title="حذف الموسم" message={`هل أنت متأكد من حذف ${deleteSeasonState.title}؟`} />
             <DeleteConfirmationModal isOpen={deleteEpisodeState.isOpen} onClose={() => setDeleteEpisodeState({ isOpen: false, seasonId: null, episodeId: null, title: '' })} onConfirm={executeDeleteEpisode} title="حذف الحلقة" message={`هل أنت متأكد من حذف ${deleteEpisodeState.title}؟`} />
             <DeleteConfirmationModal isOpen={clearSeasonServersState.isOpen} onClose={() => setClearSeasonServersState({ isOpen: false, seasonId: null, title: '' })} onConfirm={executeClearSeasonServers} title="تفريغ روابط وسيرفرات الموسم" message={`هل أنت متأكد من تفريغ وحذف جميع الروابط والسيرفرات لكافة حلقات "${clearSeasonServersState.title}"؟ لا يمكن التراجع عن هذا الإجراء.`} />
+            <DeleteConfirmationModal 
+                isOpen={deleteSectionState.isOpen} 
+                onClose={() => setDeleteSectionState({ isOpen: false, tabId: '' })} 
+                onConfirm={executeDeleteSection} 
+                title={`تأكيد حذف قسم ${deleteSectionState.tabId === 'servers' ? 'روابط السيرفرات' : 
+                        deleteSectionState.tabId === 'general' ? 'البيانات الأساسية' : 
+                        deleteSectionState.tabId === 'categories' ? 'التصنيف والأنواع' : 
+                        deleteSectionState.tabId === 'media' ? 'الصور والميديا' : 
+                        deleteSectionState.tabId === 'seasons' ? 'المواسم والحلقات' : deleteSectionState.tabId}`} 
+                message={`هل أنت متأكد من حذف وتصفير بيانات هذا القسم بالكامل؟ لا يمكن التراجع عن هذا الإجراء.`} 
+            />
             
             {/* BULK ACTION MODAL */}
             {bulkActionState.isOpen && (
@@ -4839,6 +5093,39 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
                                             <ToggleSwitch checked={autoLinkState.padTwoZeros} onChange={val => setAutoLinkState(prev => ({...prev, padTwoZeros: val, padZero: val ? false : prev.padZero}))} label={autoLinkState.padTwoZeros ? "مفعل" : "معطل"} />
                                         </div>
                                     </div>
+
+                                    {/* NEW: QUALITY MULTI-SELECT FIELDS */}
+                                    <div className="space-y-3 bg-[#161b22]/50 p-4 rounded-xl border border-gray-800">
+                                        <label className={`${labelClass} !mb-1 text-xs text-gray-300 font-bold`}>تحديد الجودة (اختياري - متعدد)</label>
+                                        <div className="flex flex-wrap gap-2 pt-1">
+                                            {['1080p', '720p', '480p', '360p', '240p'].map((qual) => {
+                                                const isSelected = autoLinkState.selectedQualities?.includes(qual);
+                                                return (
+                                                    <button
+                                                        key={qual}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const current = autoLinkState.selectedQualities || [];
+                                                            const updated = current.includes(qual)
+                                                                ? current.filter(q => q !== qual)
+                                                                : [...current, qual];
+                                                            setAutoLinkState(prev => ({ ...prev, selectedQualities: updated }));
+                                                        }}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 cursor-pointer ${
+                                                            isSelected
+                                                                ? 'bg-green-500/20 text-green-400 border-green-500 shadow-md shadow-green-500/10'
+                                                                : 'bg-gray-800/40 text-gray-400 border-gray-700/60 hover:bg-gray-800 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        {qual}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 font-medium leading-relaxed mt-1">
+                                            * عند اختيار جودات، سيتم توليد خادم منفصل لكل جودة تلقائياً مرتبة تنازلياً من الأعلى للأقل. في حال عدم تحديد أي جودة، سيتم التوليد بالطريقة الافتراضية المعتادة.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
@@ -4859,6 +5146,28 @@ const ContentEditModal: React.FC<ContentEditModalProps> = ({ content, onClose, o
                                             numStr = num < 10 ? `00${num}` : (num < 100 ? `0${num}` : `${num}`);
                                         } else if (autoLinkState.padZero) {
                                             numStr = num < 10 ? `0${num}` : `${num}`;
+                                        }
+                                        
+                                        const qualityOrder = ['1080p', '720p', '480p', '360p', '240p'];
+                                        const sortedSelectedQualities = [...(autoLinkState.selectedQualities || [])].sort((a, b) => {
+                                            const idxA = qualityOrder.indexOf(a);
+                                            const idxB = qualityOrder.indexOf(b);
+                                            if (idxA === -1) return 1;
+                                            if (idxB === -1) return -1;
+                                            return idxA - idxB;
+                                        });
+
+                                        if (sortedSelectedQualities.length > 0) {
+                                            return (
+                                                <div className="space-y-3 font-mono">
+                                                    {sortedSelectedQualities.map(q => (
+                                                        <div key={q} className="flex flex-col gap-1 border-b border-gray-800/50 pb-2 last:border-b-0 last:pb-0">
+                                                            <span className="text-[10px] text-green-400 font-bold">{q}:</span>
+                                                            <span className="text-xs text-white">{`${cleanBase}/${cleanSlug}${numStr}-${q}${autoLinkState.suffix || '.mp4'}`}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
                                         }
                                         
                                         return `${cleanBase}/${cleanSlug}${numStr}${autoLinkState.suffix || '.mp4'}`;

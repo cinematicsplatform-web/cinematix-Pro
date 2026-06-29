@@ -119,6 +119,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ poster, manualSrc, tmdbId, ty
     }
 
     if (finalUrl && finalUrl.trim() !== '') {
+        if (typeof window !== 'undefined' && window.location.protocol === 'https:' && finalUrl.toLowerCase().startsWith('http://')) {
+            finalUrl = finalUrl.replace(/^http:\/\//i, 'https://');
+        }
         setIsServerLoading(true);
         if (shouldUseIsolation) {
             const encodedUrl = encodeURIComponent(finalUrl);

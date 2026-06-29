@@ -148,6 +148,7 @@ export interface AutoLinkConfig {
   suffix: string;
   padZero: boolean;
   padTwoZeros: boolean;
+  selectedQualities?: string[];
 }
 
 export interface GlobalServer {
